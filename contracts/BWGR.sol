@@ -1,5 +1,5 @@
 pragma solidity ^0.8.0;
-import "./IBEP20.sol";
+import "./interfaces/IBEP20.sol";
 
 /*
  * @dev Provides information about the current execution context, including the
