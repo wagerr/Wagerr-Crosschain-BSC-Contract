@@ -6,13 +6,13 @@ describe("Betting", () => {
     [deployer, user] = await ethers.getSigners();
     token = await ethers.getContractFactory("BEP20Token");
     token = await token.deploy();
-    Betting = await ethers.getContractFactory("BettingV2");
+    Betting = await ethers.getContractFactory("BettingV4");
     betting = await upgrades.deployProxy(
       Betting,
       [token.address] /*{deployer.address:deployer.address}*/
     ); //dont need deployer.address in ganache
-    const BettingV3 = await ethers.getContractFactory("BettingV3");
-    betting = await upgrades.upgradeProxy(betting, BettingV3);
+    const BettingV4 = await ethers.getContractFactory("BettingV4");
+    betting = await upgrades.upgradeProxy(betting, BettingV4);
     console.log(token.address, betting.address);
   });
   beforeEach(async () => {
@@ -28,7 +28,7 @@ describe("Betting", () => {
     console.log("approved token for ", betting.address);
     await betting
       .connect(user)
-      .doBet("ABCD1234564543", ethers.utils.parseEther("25"));
+      .betWithWGR("ABCD1234564543", ethers.utils.parseEther("25"));
   });
 
   /*describe("testing token contract...", () => {
@@ -156,7 +156,7 @@ describe("Betting", () => {
       await expect(
         betting
           .connect(user)
-          .doBet("ABCD1234564543", ethers.utils.parseEther("0.5"))
+          .betWithWGR("ABCD1234564543", ethers.utils.parseEther("0.5"))
       ).to.be.revertedWith("minimum bet 25 BWGR");
     });
 
@@ -165,7 +165,7 @@ describe("Betting", () => {
         .connect(user)
         .approve(betting.address, ethers.utils.parseEther("1"));
       await expect(
-        betting.connect(user).doBet("", ethers.utils.parseEther("25"))
+        betting.connect(user).betWithWGR("", ethers.utils.parseEther("25"))
       ).to.be.revertedWith("invalid opcode");
     });
 
