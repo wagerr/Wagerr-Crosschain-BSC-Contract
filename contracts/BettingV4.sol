@@ -1,13 +1,17 @@
 pragma solidity ^0.8.0;
-import "./IBEP20.sol";
+import "./interfaces/IBEP20.sol";
 import "./openzeppelin/SafeBEP20.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "./interfaces/IPancakeRouter.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "./interfaces/IPancakeRouter02.sol";
+import "./interfaces/IWETH.sol";
 
 contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using SafeBEP20 for IBEP20;
+    using SafeMath for uint256;
+
     IBEP20 private token;
     uint256 public betIndex;
 
@@ -17,16 +21,26 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(string => uint256) public totalPayout;
 
     address private PANCAKESWAP_ROUTER;
+    address private WBNB;
+    address private BWGR;
 
-    address private constant WBNB = 0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd;
-    address private constant BWGR = 0xFA2Dfd4f223535E0780d8e17e43B97d23AAB88a9;
+    bool public isBettingEnabled;
 
-    function initialize(IBEP20 _token) public initializer {
-        token = _token;
+    uint256 public fee; //fees gwei
+
+    function initialize(
+        address _token,
+        address _wbnb,
+        address _pancakeRouter
+    ) public initializer {
+        token = IBEP20(_token);
         betIndex = 1;
-        Coins["BNB"] = WBNB; //WBNB address
-        PANCAKESWAP_ROUTER = 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3;
+        PANCAKESWAP_ROUTER = _pancakeRouter;
+        WBNB = _wbnb;
+        BWGR = _token;
+
         isBettingEnabled = true;
+        fee = 1009820 gwei;
         __Ownable_init();
     }
 
@@ -78,52 +92,9 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         string finalStatus
     );
 
-    bool public isBettingEnabled;
-
-    //this swap function is used to trade from one token to another
-    //the inputs are self explainatory
-    //token in = the token address you want to trade out of
-    //token out = the token address you want as the output of this trade
-    //amount in = the amount of tokens you are sending in
-    //amount out Min = the minimum amount of tokens you want out of the trade
-    //to = the address you want the tokens to be sent to
-
-    function swap(
-        address _tokenIn,
-        address _tokenOut,
-        uint256 _amountIn,
-        uint256 _amountOutMin,
-        address _to
-    ) private {
-        //next we need to allow the pancakeswap router to spend the token we just sent to this contract
-        //by calling IBEP20 approve you allow the pancakeswap contract to spend the tokens in this contract
-        IBEP20(_tokenIn).safeApprove(PANCAKESWAP_ROUTER, _amountIn);
-
-        //path is an array of addresses.
-        //this path array will have 3 addresses [tokenIn, WBNB, tokenOut]
-        //the if statement below takes into account if token in or token out is WBNB.  then the path is only 2 addresses
-        address[] memory path;
-        if (_tokenIn == WBNB || _tokenOut == WBNB) {
-            path = new address[](2);
-            path[0] = _tokenIn;
-            path[1] = _tokenOut;
-        } else {
-            path = new address[](3);
-            path[0] = _tokenIn;
-            path[1] = WBNB;
-            path[2] = _tokenOut;
-        }
-
-        //then we will call swapExactTokensForTokens
-        //for the deadline we will pass in block.timestamp
-        //the deadline is the latest time the trade is valid for
-        IPancakeRouter(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
-            _amountIn,
-            _amountOutMin,
-            path,
-            _to,
-            block.timestamp
-        );
+    modifier bettingEnable() {
+        require(isBettingEnabled == true, "Betting is disabled");
+        _;
     }
 
     //this function will return the minimum amount from a swap
@@ -133,7 +104,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address _tokenIn,
         address _tokenOut,
         uint256 _amountIn
-    ) public view returns (uint256) {
+    ) internal view returns (uint256) {
         //path is an array of addresses.
         //this path array will have 3 addresses [tokenIn, WBNB, tokenOut]
         //the if statement below takes into account if token in or token out is WBNB.  then the path is only 2 addresses
@@ -149,9 +120,35 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             path[2] = _tokenOut;
         }
 
-        uint256[] memory amountOutMins = IPancakeRouter(PANCAKESWAP_ROUTER)
+        uint256[] memory amountOutMins = IPancakeRouter02(PANCAKESWAP_ROUTER)
             .getAmountsOut(_amountIn, path);
         return amountOutMins[path.length - 1];
+    }
+
+    //Returns the min output assets require to buy exact input
+    function getAmountInMin(
+        address _tokenOut,
+        address _tokenIn,
+        uint256 _amountOut
+    ) external view returns (uint256) {
+        //path is an array of addresses.
+        //this path array will have 3 addresses [tokenIn, WBNB, tokenOut]
+        //the if statement below takes into account if token in or token out is WBNB.  then the path is only 2 addresses
+        address[] memory path;
+        if (_tokenIn == WBNB || _tokenOut == WBNB) {
+            path = new address[](2);
+            path[0] = _tokenOut;
+            path[1] = _tokenIn;
+        } else {
+            path = new address[](3);
+            path[0] = _tokenOut;
+            path[1] = WBNB;
+            path[2] = _tokenIn;
+        }
+
+        uint256[] memory amountInMins = IPancakeRouter02(PANCAKESWAP_ROUTER)
+            .getAmountsIn(_amountOut, path);
+        return amountInMins[0];
     }
 
     function updatePancakeRouter(address _newRouter) external onlyOwner {
@@ -173,6 +170,10 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         delete Coins[_symbol];
     }
 
+    function setFee(uint256 _fee) external onlyOwner {
+        fee = _fee; //fees in BNB
+    }
+
     // Function to withdraw all Ether from this contract.
     function withdraw(uint256 _amount) external onlyOwner returns (bool) {
         // get the amount of token stored in this contract
@@ -182,6 +183,13 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // send all token to owner
         token.safeTransfer(owner(), _amount);
+    }
+
+    function convertFeeToCoin(address _coin) public view returns (uint256) {
+        if (_coin == WBNB) return fee;
+        uint256 fee = getAmountOutMin(WBNB, _coin, fee);
+
+        return fee;
     }
 
     function validateAndUpdateState(
@@ -212,7 +220,9 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             "pending"
         );
         totalBets["total"] += _wgrAmount;
-        totalBets[_tokenFrom] += _coinAmount;
+        totalBets[_tokenFrom] += _coinAmount.sub(
+            convertFeeToCoin(Coins[_tokenFrom])
+        );
 
         //totalBets = totalBets + amountOutMin;
         uint256 tempBetIndex = betIndex;
@@ -222,18 +232,57 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return tempBetIndex;
     }
 
-    function doBet2(
+    function betWithBNB(string calldata _opcode)
+        external
+        payable
+        bettingEnable
+    {
+        uint256 amountOutMin = getAmountOutMin(WBNB, BWGR, msg.value);
+
+        amountOutMin = amountOutMin.sub(convertFeeToCoin(BWGR));
+
+        uint256 tempBetIndex = validateAndUpdateState(
+            amountOutMin,
+            _opcode,
+            msg.sender,
+            "BNB",
+            msg.value
+        );
+        address[] memory path = new address[](2);
+        path[0] = WBNB;
+        path[1] = BWGR;
+
+        //converting full bnb amount to WGR without fee deduction.
+        //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract.
+        IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactETHForTokens{
+            value: msg.value
+        }(amountOutMin, path, address(this), block.timestamp); //calling payable function
+
+        //emit bet event
+        emit Bet(
+            tempBetIndex,
+            msg.sender,
+            _opcode,
+            amountOutMin,
+            "BNB",
+            msg.value,
+            block.timestamp,
+            Bets[tempBetIndex].finalStatus
+        );
+    }
+
+    function betWithToken(
         string calldata _opcode,
         string calldata _tokenFrom,
         uint256 _amount
-    ) external {
-        require(isBettingEnabled == true, "Betting is disabled");
-
+    ) external bettingEnable {
         address fromToken = Coins[_tokenFrom];
 
         require(fromToken != address(0), "Coin not supported");
 
         uint256 amountOutMin = getAmountOutMin(fromToken, BWGR, _amount);
+
+        amountOutMin = amountOutMin.sub(convertFeeToCoin(BWGR));
 
         uint256 tempBetIndex = validateAndUpdateState(
             amountOutMin,
@@ -247,7 +296,22 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         IBEP20(fromToken).safeTransferFrom(msg.sender, address(this), _amount);
 
-        swap(fromToken, BWGR, _amount, amountOutMin, address(this));
+        IBEP20(fromToken).safeApprove(PANCAKESWAP_ROUTER, _amount);
+
+        address[] memory path = new address[](3);
+        path[0] = fromToken;
+        path[1] = WBNB;
+        path[2] = BWGR;
+
+        //converting full fromToken amount to WGR without fee deduction.
+        //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract.
+        IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+            _amount,
+            amountOutMin,
+            path,
+            address(this),
+            block.timestamp
+        );
 
         //emit bet event
         emit Bet(
@@ -262,15 +326,18 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         );
     }
 
-    function doBet(string calldata _opcode, uint256 _amount) external {
-        require(isBettingEnabled == true, "Betting is disabled");
+    function betWithWGR(string calldata _opcode, uint256 _amount)
+        external
+        bettingEnable
+    {
+        uint256 amount = _amount.sub(convertFeeToCoin(BWGR));
 
         uint256 tempBetIndex = validateAndUpdateState(
-            _amount,
+            amount,
             _opcode,
             msg.sender,
             "WGR",
-            _amount
+            amount
         );
 
         //transfer bet amount
@@ -281,9 +348,9 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             tempBetIndex,
             msg.sender,
             _opcode,
-            _amount,
+            amount,
             "WGR",
-            _amount, //wgrAmount and coinAmount both same
+            _amount,
             block.timestamp,
             Bets[tempBetIndex].finalStatus
         );
@@ -307,6 +374,9 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Bets[_betIndex].finalStatus = "refunded";
         totalRefunds["total"] += amount;
         uint256 amountOutMin = 0;
+
+        amount = amount.sub(convertFeeToCoin(BWGR));
+
         if (
             keccak256(abi.encodePacked(coin)) ==
             keccak256(abi.encodePacked("WGR"))
@@ -315,11 +385,42 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             amountOutMin = amount;
             //refund full bet amount to user
             token.safeTransfer(user, amount);
+        } else if (
+            keccak256(abi.encodePacked(coin)) ==
+            keccak256(abi.encodePacked("BNB"))
+        ) {
+            address[] memory path = new address[](2);
+            path[0] = BWGR;
+            path[1] = WBNB;
+
+            amountOutMin = getAmountOutMin(BWGR, WBNB, amount);
+            totalRefunds[coin] += amountOutMin;
+            token.safeApprove(PANCAKESWAP_ROUTER, amount);
+            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForETH(
+                amount,
+                amountOutMin,
+                path,
+                user,
+                block.timestamp
+            );
         } else {
             address toToken = Coins[coin];
+
+            address[] memory path = new address[](3);
+            path[0] = BWGR;
+            path[1] = WBNB;
+            path[2] = toToken;
+
             amountOutMin = getAmountOutMin(BWGR, toToken, amount);
             totalRefunds[coin] += amountOutMin;
-            swap(BWGR, toToken, amount, amountOutMin, user);
+            token.safeApprove(PANCAKESWAP_ROUTER, amount);
+            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+                amount,
+                amountOutMin,
+                path,
+                user,
+                block.timestamp
+            );
         }
 
         emit Refund(
@@ -371,57 +472,92 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //require valid betIndex
         require(_betIndex < betIndex, "invalid betIndex");
         //check final status should be bet processed.
-        require(
-            keccak256(abi.encodePacked(Bets[_betIndex].finalStatus)) ==
-                keccak256(abi.encodePacked("processed")),
-            "bet not processed yet or refunded"
-        );
-
-        //require payoutTxId
-        require(bytes(_payoutTx).length > 0, "payoutTxId cannot be empty");
-
-        //require resultType
-        require(bytes(_resultType).length > 0, "resultType cannot be empty");
-
-        //required payout amount
-        require(_payout > 1 ether, "payout amount required");
-
-        //store WGR chain payouttx id
-        Bets[_betIndex].payoutTxId = _payoutTx;
-
-        totalPayout["total"] += _payout;
-
-        //update bet status
-        Bets[_betIndex].finalStatus = "completed";
-
-        //get bet by index
-        address user = Bets[_betIndex].user;
-        uint256 amountOutMin = 0;
 
         // prevent "CompilerError: Stack too deep, try removing local variables."
         string memory coin = Bets[_betIndex].coin;
         string memory finalStatus = Bets[_betIndex].finalStatus;
         string memory payoutTx = _payoutTx;
         string memory resultType = _resultType;
+        uint256 payout = _payout;
+
+        require(
+            keccak256(abi.encodePacked(finalStatus)) ==
+                keccak256(abi.encodePacked("processed")),
+            "bet not processed yet or refunded"
+        );
+
+        //require payoutTxId
+        require(bytes(payoutTx).length > 0, "payoutTxId cannot be empty");
+
+        //require resultType
+        require(bytes(resultType).length > 0, "resultType cannot be empty");
+
+        //required payout amount
+        require(payout > 1 ether, "payout amount required");
+
+        //store WGR chain payouttx id
+        Bets[_betIndex].payoutTxId = payoutTx;
+
+        totalPayout["total"] += payout;
+
+        //update bet status
+        Bets[_betIndex].finalStatus = "completed";
+        finalStatus = Bets[_betIndex].finalStatus;
+
+        //get bet by index
+        address user = Bets[_betIndex].user;
+        uint256 amountOutMin = 0;
+
+        payout = payout.sub(convertFeeToCoin(BWGR));
 
         if (
             keccak256(abi.encodePacked(coin)) ==
             keccak256(abi.encodePacked("WGR"))
         ) {
-            totalPayout["WGR"] += _payout;
-            amountOutMin = _payout;
+            totalPayout["WGR"] += payout;
+            amountOutMin = payout;
             //send payout
-            token.safeTransfer(user, _payout);
+            token.safeTransfer(user, payout);
+        } else if (
+            keccak256(abi.encodePacked(coin)) ==
+            keccak256(abi.encodePacked("BNB"))
+        ) {
+            address[] memory path = new address[](2);
+            path[0] = BWGR;
+            path[1] = WBNB;
+            amountOutMin = getAmountOutMin(BWGR, WBNB, payout);
+            totalPayout[coin] += amountOutMin;
+            token.safeApprove(PANCAKESWAP_ROUTER, payout);
+            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForETH(
+                payout,
+                amountOutMin,
+                path,
+                user,
+                block.timestamp
+            );
         } else {
             address toToken = Coins[coin];
-            amountOutMin = getAmountOutMin(BWGR, toToken, _payout);
+
+            address[] memory path = new address[](3);
+            path[0] = BWGR;
+            path[1] = WBNB;
+            path[2] = toToken;
+
+            amountOutMin = getAmountOutMin(BWGR, toToken, payout);
             totalPayout[coin] += amountOutMin;
-            swap(BWGR, toToken, _payout, amountOutMin, user);
+            token.safeApprove(PANCAKESWAP_ROUTER, payout);
+            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+                payout,
+                amountOutMin,
+                path,
+                user,
+                block.timestamp
+            );
         }
 
         emit Payout(
             _betIndex,
-            _payout,
+            payout,
             coin,
             amountOutMin,
             block.timestamp,
