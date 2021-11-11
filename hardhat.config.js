@@ -37,7 +37,7 @@ module.exports = {
       accounts: privateKeys.split(","),
       chainId: 97,
       gas: 5000000,
-      gasPrice: 30000000000,
+      gasPrice: 10000000000,
       timeout: 2000,
     },
     bsc: {
