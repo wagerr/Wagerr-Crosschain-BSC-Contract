@@ -34,7 +34,7 @@ module.exports = async (hre) => {
       [
         "0xfa2dfd4f223535e0780d8e17e43b97d23aab88a9", //BWGR
         "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd", //WBNB
-        "0xD99D1c33F9fC3444f8101754aBC46c52416550D1", //PancakeRouter
+        "0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1", //apeswap router testnet , ("0xD99D1c33F9fC3444f8101754aBC46c52416550D1" <- //PancakeRouter)
       ],
       {
         kind: "uups",

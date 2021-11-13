@@ -21,7 +21,7 @@ async function main() {
 
   const bettingV4 = await ethers.getContractAt(
     "BettingV4",
-    "0x511CF9C7F335726200743b2925537d0E614e5db2", //old -> "0xD4AA2d3668fdD3cC145287378121A5D3a8f98190",
+    "0x2b1a716446aea5a18c8da81d193ad59b561f3bb2", //old -> "0xD4AA2d3668fdD3cC145287378121A5D3a8f98190", 0x511CF9C7F335726200743b2925537d0E614e5db2 <- pancakeswap
     deployer
   );
 

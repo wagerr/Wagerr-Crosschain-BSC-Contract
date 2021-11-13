@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "./interfaces/IPancakeRouter02.sol";
+import "./interfaces/IExchangeRouter.sol";
 import "./interfaces/IWETH.sol";
 
 contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -20,7 +20,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(string => uint256) public totalRefunds;
     mapping(string => uint256) public totalPayout;
 
-    address private PANCAKESWAP_ROUTER;
+    address private EXCHANGE_ROUTER;
     address private WBNB;
     address private BWGR;
 
@@ -31,11 +31,11 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function initialize(
         address _token,
         address _wbnb,
-        address _pancakeRouter
+        address _exchangeRouter
     ) public initializer {
         token = IBEP20(_token);
         betIndex = 1;
-        PANCAKESWAP_ROUTER = _pancakeRouter;
+        EXCHANGE_ROUTER = _exchangeRouter;
         WBNB = _wbnb;
         BWGR = _token;
 
@@ -120,7 +120,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             path[2] = _tokenOut;
         }
 
-        uint256[] memory amountOutMins = IPancakeRouter02(PANCAKESWAP_ROUTER)
+        uint256[] memory amountOutMins = IExchangeRouter(EXCHANGE_ROUTER)
             .getAmountsOut(_amountIn, path);
         return amountOutMins[path.length - 1];
     }
@@ -146,13 +146,13 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             path[2] = _tokenIn;
         }
 
-        uint256[] memory amountInMins = IPancakeRouter02(PANCAKESWAP_ROUTER)
+        uint256[] memory amountInMins = IExchangeRouter(EXCHANGE_ROUTER)
             .getAmountsIn(_amountOut, path);
         return amountInMins[0];
     }
 
-    function updatePancakeRouter(address _newRouter) external onlyOwner {
-        PANCAKESWAP_ROUTER = _newRouter;
+    function updateExchangeRouter(address _newRouter) external onlyOwner {
+        EXCHANGE_ROUTER = _newRouter;
     }
 
     function onOff() external onlyOwner {
@@ -232,7 +232,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return tempBetIndex;
     }
 
-    function betWithBNB(string calldata _opcode)
+    function betWithNativeCoin(string calldata _opcode)
         external
         payable
         bettingEnable
@@ -254,7 +254,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         //converting full bnb amount to WGR without fee deduction.
         //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract.
-        IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactETHForTokens{
+        IExchangeRouter(EXCHANGE_ROUTER).swapExactETHForTokens{
             value: msg.value
         }(amountOutMin, path, address(this), block.timestamp); //calling payable function
 
@@ -296,7 +296,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         IBEP20(fromToken).safeTransferFrom(msg.sender, address(this), _amount);
 
-        IBEP20(fromToken).safeApprove(PANCAKESWAP_ROUTER, _amount);
+        IBEP20(fromToken).safeApprove(EXCHANGE_ROUTER, _amount);
 
         address[] memory path = new address[](3);
         path[0] = fromToken;
@@ -305,7 +305,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         //converting full fromToken amount to WGR without fee deduction.
         //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract.
-        IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+        IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForTokens(
             _amount,
             amountOutMin,
             path,
@@ -395,8 +395,8 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             amountOutMin = getAmountOutMin(BWGR, WBNB, amount);
             totalRefunds[coin] += amountOutMin;
-            token.safeApprove(PANCAKESWAP_ROUTER, amount);
-            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForETH(
+            token.safeApprove(EXCHANGE_ROUTER, amount);
+            IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForETH(
                 amount,
                 amountOutMin,
                 path,
@@ -413,8 +413,8 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             amountOutMin = getAmountOutMin(BWGR, toToken, amount);
             totalRefunds[coin] += amountOutMin;
-            token.safeApprove(PANCAKESWAP_ROUTER, amount);
-            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+            token.safeApprove(EXCHANGE_ROUTER, amount);
+            IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForTokens(
                 amount,
                 amountOutMin,
                 path,
@@ -527,8 +527,8 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             path[1] = WBNB;
             amountOutMin = getAmountOutMin(BWGR, WBNB, payout);
             totalPayout[coin] += amountOutMin;
-            token.safeApprove(PANCAKESWAP_ROUTER, payout);
-            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForETH(
+            token.safeApprove(EXCHANGE_ROUTER, payout);
+            IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForETH(
                 payout,
                 amountOutMin,
                 path,
@@ -545,8 +545,8 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             amountOutMin = getAmountOutMin(BWGR, toToken, payout);
             totalPayout[coin] += amountOutMin;
-            token.safeApprove(PANCAKESWAP_ROUTER, payout);
-            IPancakeRouter02(PANCAKESWAP_ROUTER).swapExactTokensForTokens(
+            token.safeApprove(EXCHANGE_ROUTER, payout);
+            IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForTokens(
                 payout,
                 amountOutMin,
                 path,
