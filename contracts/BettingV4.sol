@@ -48,6 +48,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address user;
         string opcode;
         uint256 wgrAmount;
+        uint256 fees;
         string coin;
         uint256 coinAmount;
         string wgrBetTx;
@@ -63,6 +64,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address indexed user,
         string opcode,
         uint256 wgrAmount,
+        uint256 fees,
         string coin,
         uint256 coinAmount,
         uint256 timestamp,
@@ -84,6 +86,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event Payout(
         uint256 indexed betIndex,
         uint256 wgrAmount,
+        uint256 fees,
         string coin,
         uint256 coinAmount,
         uint256 timestamp,
@@ -175,7 +178,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Function to withdraw all Ether from this contract.
-    function withdraw(uint256 _amount) external onlyOwner returns (bool) {
+    function withdraw(uint256 _amount) external onlyOwner {
         // get the amount of token stored in this contract
         uint256 amount = token.balanceOf(address(this));
 
@@ -187,13 +190,14 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function convertFeeToCoin(address _coin) public view returns (uint256) {
         if (_coin == WBNB) return fee;
-        uint256 fee = getAmountOutMin(WBNB, _coin, fee);
+        uint256 _fee = getAmountOutMin(WBNB, _coin, fee);
 
-        return fee;
+        return _fee;
     }
 
     function validateAndUpdateState(
         uint256 _wgrAmount,
+        uint256 _fees,
         string memory _opcode,
         address _caller,
         string memory _tokenFrom,
@@ -213,6 +217,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             _caller,
             _opcode,
             _wgrAmount,
+            _fees,
             _tokenFrom,
             _coinAmount,
             "",
@@ -237,12 +242,15 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         payable
         bettingEnable
     {
+        require(Coins["BNB"] != address(0), "Coin not supported");
+        
         uint256 amountOutMin = getAmountOutMin(WBNB, BWGR, msg.value);
-
-        amountOutMin = amountOutMin.sub(convertFeeToCoin(BWGR));
+        uint256 fees = convertFeeToCoin(BWGR);
+        amountOutMin = amountOutMin.sub(fees);
 
         uint256 tempBetIndex = validateAndUpdateState(
             amountOutMin,
+            fees,
             _opcode,
             msg.sender,
             "BNB",
@@ -264,6 +272,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             msg.sender,
             _opcode,
             amountOutMin,
+            fees,
             "BNB",
             msg.value,
             block.timestamp,
@@ -281,11 +290,12 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(fromToken != address(0), "Coin not supported");
 
         uint256 amountOutMin = getAmountOutMin(fromToken, BWGR, _amount);
-
-        amountOutMin = amountOutMin.sub(convertFeeToCoin(BWGR));
+        uint256 fees = convertFeeToCoin(BWGR);
+        amountOutMin = amountOutMin.sub(fees);
 
         uint256 tempBetIndex = validateAndUpdateState(
             amountOutMin,
+            fees,
             _opcode,
             msg.sender,
             _tokenFrom,
@@ -304,7 +314,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         path[2] = BWGR;
 
         //converting full fromToken amount to WGR without fee deduction.
-        //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract.
+        //but actual WGR betting amount has fees deduction(amountOutMin).  deducted wgr will be store in contract when refunding.
         IExchangeRouter(EXCHANGE_ROUTER).swapExactTokensForTokens(
             _amount,
             amountOutMin,
@@ -319,6 +329,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             msg.sender,
             _opcode,
             amountOutMin,
+            fees,
             _tokenFrom,
             _amount,
             block.timestamp,
@@ -330,10 +341,14 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         external
         bettingEnable
     {
-        uint256 amount = _amount.sub(convertFeeToCoin(BWGR));
+        require(Coins["WGR"] != address(0), "Coin not supported");
+
+        uint256 fees = convertFeeToCoin(BWGR);
+        uint256 amount = _amount.sub(fees);
 
         uint256 tempBetIndex = validateAndUpdateState(
             amount,
+            fees,
             _opcode,
             msg.sender,
             "WGR",
@@ -349,6 +364,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             msg.sender,
             _opcode,
             amount,
+            fees,
             "WGR",
             _amount,
             block.timestamp,
@@ -375,7 +391,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         totalRefunds["total"] += amount;
         uint256 amountOutMin = 0;
 
-        amount = amount.sub(convertFeeToCoin(BWGR));
+        //refund does not need fees deduction, as fees already deducted from betting amount.
 
         if (
             keccak256(abi.encodePacked(coin)) ==
@@ -507,8 +523,8 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //get bet by index
         address user = Bets[_betIndex].user;
         uint256 amountOutMin = 0;
-
-        payout = payout.sub(convertFeeToCoin(BWGR));
+        uint256 fees = convertFeeToCoin(BWGR);
+        payout = payout.sub(fees);
 
         if (
             keccak256(abi.encodePacked(coin)) ==
@@ -558,6 +574,7 @@ contract BettingV4 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit Payout(
             _betIndex,
             payout,
+            fees,
             coin,
             amountOutMin,
             block.timestamp,
