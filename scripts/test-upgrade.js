@@ -19,14 +19,14 @@ async function main() {
   const signers = await ethers.getSigners();
   const deployer = signers[0];
 
-  const bettingV4 = await ethers.getContractAt(
-    "BettingV4",
-    "0x2b1a716446aea5a18c8da81d193ad59b561f3bb2", //old -> "0xD4AA2d3668fdD3cC145287378121A5D3a8f98190", 0x511CF9C7F335726200743b2925537d0E614e5db2 <- pancakeswap
+  const betting = await ethers.getContractAt(
+    "Betting",
+    "0x5ef0260999de24bd65aF05e706527355267De286", //old -> "0xc249F8011EE09f7CAea548e2bB16C20e8A6981DB", 0x511CF9C7F335726200743b2925537d0E614e5db2 <- pancakeswap
     deployer
   );
 
-  console.log(await bettingV4.version());
-  assert((await bettingV4.version()) === "v4");
+  console.log(await betting.version());
+  assert((await betting.version()) === "v5");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -12,7 +12,7 @@ module.exports = async (hre) => {
 
     console.log("token Deployed At:", token.address);
 
-    const Betting = await ethers.getContractFactory("BettingV4");
+    const Betting = await ethers.getContractFactory("Betting");
     const betting = await upgrades.deployProxy(
       Betting,
       [
@@ -28,7 +28,7 @@ module.exports = async (hre) => {
 
     console.log("betting contract deployed At:", betting.address);
   } else if (network == "testnet") {
-    const Betting = await ethers.getContractFactory("BettingV4");
+    const Betting = await ethers.getContractFactory("Betting");
     const betting = await upgrades.deployProxy(
       Betting,
       [
