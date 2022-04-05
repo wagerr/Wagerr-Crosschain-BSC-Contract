@@ -40,7 +40,7 @@ module.exports = {
       gasPrice: 10000000000,
       timeout: 2000,
     },
-    bsc: {
+    mainnet: {
       url: "https://bsc-dataseed1.binance.org",
       accounts: privateKeys.split(","),
       chainId: 56,

@@ -4,7 +4,6 @@
 // When running the script with `npx hardhat run <script>` you'll find the Hardhat
 // Runtime Environment's members available in the global scope.
 
-const { assert } = require("chai");
 const hre = require("hardhat");
 const { ethers } = hre;
 
@@ -18,31 +17,29 @@ async function main() {
 
   const signers = await ethers.getSigners();
   const deployer = signers[0];
+  const user = signers[1];
 
-  const network = hre.network.name;
-  const configs = {
-    testnet: {
-      betting: {
-        latest: "0x5ef0260999de24bd65aF05e706527355267De286", //<- apeswap
-        old: "0xc249f8011ee09f7caea548e2bb16c20e8a6981db",
-        pancake: "0x511CF9C7F335726200743b2925537d0E614e5db2",
-      }
-    },
-    mainnet: {
-      betting: {
-        latest: "0xeAb188D56bc9C2E7902Db11deBDFdfD471EBD5d6", //<- apeswap
-      }
-    }
-  }
   const betting = await ethers.getContractAt(
     "Betting",
-    configs[network].betting.latest,
+    "0x5ef0260999de24bd65aF05e706527355267De286", //old: 0xc249F8011EE09f7CAea548e2bB16C20e8A6981DB ,("0x511CF9C7F335726200743b2925537d0E614e5db2" <- deployed with pancake router ,)
     deployer
   );
-
-  console.log(await betting.version());
-  assert((await betting.version()) === "v5");
+    
+    await transferOwnership(
+      betting,
+      deployer,
+      "0xe7579Ba4Ad18dd83aA799D414Bb1f875Da03d5d2"
+    );
 }
+
+async function transferOwnership(betting, deployer, to) {
+
+    await betting.connect(deployer).transferOwnership(to);
+
+
+}
+
+
 
 // We recommend this pattern to be able to use async/await everywhere
 // and properly handle errors.

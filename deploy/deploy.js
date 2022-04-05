@@ -43,6 +43,22 @@ module.exports = async (hre) => {
     await betting.deployed();
 
     console.log("betting contract deployed At:", betting.address);
+  } else if (network == "mainnet") {
+    const Betting = await ethers.getContractFactory("Betting");
+    const betting = await upgrades.deployProxy(
+      Betting,
+      [
+        "0xdBf8265B1d5244A13424f13977723AcF5395eAB2", //BWGR
+        "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", //WBNB
+        "0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7", //apeswap router mainnet
+      ],
+      {
+        kind: "uups",
+      }
+    );
+    await betting.deployed();
+
+    console.log("betting contract deployed At:", betting.address);
   }
 };
 module.exports.tags = ["Deploy"];

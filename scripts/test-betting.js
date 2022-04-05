@@ -7,6 +7,31 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
+const network = hre.network.name;
+const configs = {
+  testnet: {
+    betting: {
+      latest: "0x5ef0260999de24bd65aF05e706527355267De286", //<- apeswap
+      old: "0xc249f8011ee09f7caea548e2bb16c20e8a6981db",
+      pancake: "0x511CF9C7F335726200743b2925537d0E614e5db2",
+    },
+    bwgr: "0xfa2dfd4f223535e0780d8e17e43b97d23aab88a9",
+    wbnb: "0xae13d989dac2f0debff460ac112a837c89baa7cd",
+    busd: "0x78867bbeef44f2326bf8ddd1941a4439382ef2a7",
+    exchangeRouter: "0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1", //<- apeswap ,0xD99D1c33F9fC3444f8101754aBC46c52416550D1 : pancake router
+  },
+  mainnet: {
+    betting: {
+      latest: "0xeAb188D56bc9C2E7902Db11deBDFdfD471EBD5d6", //<- apeswap
+    },
+    bwgr: "0xdbf8265b1d5244a13424f13977723acf5395eab2",
+    wbnb: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+    busd: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+    exchangeRouter: "0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7",
+  },
+};
+
+
 async function main() {
   // Hardhat always runs the compile task when running scripts with its command
   // line interface.
@@ -18,40 +43,34 @@ async function main() {
   const signers = await ethers.getSigners();
   const deployer = signers[0];
   const user = signers[1];
+  
 
   const betting = await ethers.getContractAt(
     "Betting",
-    "0x5ef0260999de24bd65aF05e706527355267De286", //old: 0xc249F8011EE09f7CAea548e2bB16C20e8A6981DB ,("0x511CF9C7F335726200743b2925537d0E614e5db2" <- deployed with pancake router ,)
-
+    configs[network].betting.latest,
     deployer
   );
   const bwgr = await ethers.getContractAt(
     "IBEP20",
-    "0xfa2dfd4f223535e0780d8e17e43b97d23aab88a9",
+    configs[network].bwgr,
     deployer
   );
 
-  const WBNB = await ethers.getContractAt(
-    "IBEP20",
-    "0xae13d989dac2f0debff460ac112a837c89baa7cd"
-  );
+  const WBNB = await ethers.getContractAt("IBEP20", configs[network].wbnb);
 
-  const BUSD = await ethers.getContractAt(
-    "IBEP20",
-    "0x78867bbeef44f2326bf8ddd1941a4439382ef2a7"
-  );
+  const BUSD = await ethers.getContractAt("IBEP20", configs[network].busd);
 
-  const ExchangeRouterTestNet = await ethers.getContractAt(
+  const ExchangeRouter = await ethers.getContractAt(
     "IExchangeRouter",
-    "0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1" //0xD99D1c33F9fC3444f8101754aBC46c52416550D1 : pancake router , ( 0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1 : apeswap router)
+    configs[network].exchangeRouter
   );
 
-    //await withdraw(deployer, betting);
+  //await withdraw(deployer, betting);
   //await updateExchangeRouter(deployer, betting);
-  //await addLiquidity(user, ExchangeRouterTestNet, bwgr);
-  //await removeLiquidity(user, ExchangeRouterTestNet, bwgr);
-  //await addCoins(deployer, betting); //Must add coins first before betting.
-  await removeCoins(deployer, betting);
+  //await addLiquidity(user, ExchangeRouter, bwgr);
+  //await removeLiquidity(user, ExchangeRouter, bwgr);
+  await addCoins(deployer, betting); //Must add coins first before betting.
+  //await removeCoins(deployer, betting);
   //await setFee(deployer, betting);
   //await TestBet(user, deployer, betting, bwgr, BUSD);
   //await printBetStat(betting);
@@ -132,19 +151,17 @@ async function onOffBetting(deployer, betting) {
 async function updateExchangeRouter(deployer, betting) {
   await betting
     .connect(deployer)
-    .updateExchangeRouter("0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1"); //apeswap router : 0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1  //("0xD99D1c33F9fC3444f8101754aBC46c52416550D1" : pancake router)
+    .updateExchangeRouter("new router address"); //apeswap router : 0x3380aE82e39E42Ca34EbEd69aF67fAa0683Bb5c1  //("0xD99D1c33F9fC3444f8101754aBC46c52416550D1" : pancake router)
 }
 
 async function addCoins(deployer, betting) {
-   /*await betting
-    .connect(deployer)
-    .addCoin("BUSD", "0x78867bbeef44f2326bf8ddd1941a4439382ef2a7");*/
   /*await betting
     .connect(deployer)
-    .addCoin("BNB", "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd");*/
-  await betting
+    .addCoin("BUSD", configs[network].busd);*/
+  /*await betting
     .connect(deployer)
-    .addCoin("WGR", "0xfa2dfd4f223535e0780d8e17e43b97d23aab88a9");
+    .addCoin("BNB", configs[network].wbnb);*/
+  await betting.connect(deployer).addCoin("WGR", configs[network].bwgr);
 }
 
 async function removeCoins(deployer, betting) {
